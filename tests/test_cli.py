@@ -40,6 +40,66 @@ class CliRunTest(unittest.TestCase):
             cli.main(["run", "HEAD~1..HEAD"])
 
 
+class CliBisectTest(unittest.TestCase):
+    def setUp(self):
+        self.repo = init_repo()
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+
+    def _run_in_repo(self, argv, capture=False):
+        old_cwd = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            if not capture:
+                return cli.main(argv), ""
+            out = io.StringIO()
+            with redirect_stdout(out):
+                rc = cli.main(argv)
+            return rc, out.getvalue()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bisect_reports_the_first_slow_commit(self):
+        sha0 = commit_file(self.repo, "a.txt", "0", "start")
+        commit_file(self.repo, "a.txt", "1", "fast")
+        commit_file(self.repo, "a.txt", "2", "fast still")
+        sha3 = commit_file(self.repo, "a.txt", "3", "regression")
+
+        script = (
+            "import pathlib, time\n"
+            "content = pathlib.Path('a.txt').read_text().strip()\n"
+            "time.sleep(0.6 if content == '3' else 0.0)\n"
+        )
+        rc, output = self._run_in_repo(
+            [
+                "bisect",
+                f"{sha0}..{sha3}",
+                "--threshold",
+                "0.3",
+                "--",
+                sys.executable,
+                "-c",
+                script,
+            ],
+            capture=True,
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn(sha3[:12], output)
+
+    def test_bisect_missing_command_is_a_usage_error(self):
+        with self.assertRaises(SystemExit):
+            cli.main(["bisect", "HEAD~1..HEAD", "--threshold", "1.0"])
+
+    def test_bisect_no_commit_over_threshold_exits_nonzero(self):
+        sha1 = commit_file(self.repo, "a.txt", "1", "first")
+        sha2 = commit_file(self.repo, "a.txt", "2", "second")
+        rc, output = self._run_in_repo(
+            ["bisect", f"{sha1}..{sha2}", "--threshold", "10.0", "--", sys.executable, "-c", "pass"],
+            capture=True,
+        )
+        self.assertEqual(rc, 1)
+        self.assertIn("no commit", output)
+
+
 class CliReportTest(unittest.TestCase):
     def setUp(self):
         self.repo = init_repo()

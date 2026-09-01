@@ -77,6 +77,35 @@ been recorded, pass `--command` to pick which one:
 git bench report --command "pytest -q"
 ```
 
+Once you know a range got slower, find the exact commit that caused it
+without timing every commit in between:
+
+```
+git bench bisect <rev-range> --threshold <seconds> -- <command> [args...]
+```
+
+For example, if the last 20 commits used to build in under 2 seconds and
+now don't:
+
+```
+git bench bisect HEAD~20..HEAD --threshold 2.0 -- pytest -q
+```
+
+This binary-searches the range instead of walking it linearly: it assumes
+the regression is a step change (once a commit crosses the threshold, every
+later commit in the range does too), so it only needs to time O(log n)
+commits to find the first one over threshold, each of which is still logged
+to `.git-bench/results.json` exactly as `run` would. It prints the commit
+under test at each step, then the culprit:
+
+```
+a1b2c3d4e5f6     0.284s  switch to naive regex match
+git-bench: first commit over 2.0s is a1b2c3d4e5f6  switch to naive regex match
+```
+
+If nothing in the range exceeds the threshold, it says so and exits
+non-zero.
+
 ## Status
 
 Built autonomously and gated on passing tests: every change ships only after

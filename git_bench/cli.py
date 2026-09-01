@@ -28,11 +28,6 @@ def build_parser() -> argparse.ArgumentParser:
         "range",
         help="a git revision range, e.g. HEAD~5..HEAD or abc123..def456",
     )
-    run_parser.add_argument(
-        "command",
-        nargs=argparse.REMAINDER,
-        help="the command to time, e.g. -- pytest -q",
-    )
 
     report_parser = subparsers.add_parser(
         "report",
@@ -45,22 +40,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="which recorded command to report on; required if more than one is stored",
     )
 
+    bisect_parser = subparsers.add_parser(
+        "bisect",
+        help="binary-search a range for the first commit whose command exceeds a time threshold",
+    )
+    bisect_parser.add_argument(
+        "range",
+        help="a git revision range, e.g. HEAD~20..HEAD or abc123..def456",
+    )
+    bisect_parser.add_argument(
+        "--threshold",
+        type=float,
+        required=True,
+        help="seconds; report the first commit whose command takes longer than this",
+    )
+
     return parser
 
 
-def _clean_command(raw: List[str]) -> List[str]:
-    if raw and raw[0] == "--":
-        raw = raw[1:]
-    return raw
+def _split_command(argv: List[str]) -> "tuple[List[str], List[str]]":
+    """Split ``argv`` on the first ``--`` into (front, command).
+
+    Everything after ``--`` is the command to time, taken verbatim; this is
+    done before argparse ever sees it so the command's own flags are never
+    mistaken for ``git-bench`` options, and so ``--threshold``/other options
+    can appear in any order relative to ``--`` on the front side.
+    """
+    if "--" in argv:
+        idx = argv.index("--")
+        return argv[:idx], argv[idx + 1 :]
+    return argv, []
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    front, command = _split_command(argv)
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(front)
 
     if args.action == "run":
-        command = _clean_command(args.command)
         if not command:
             parser.error("no command given; pass it after '--', e.g. run HEAD~3..HEAD -- pytest")
 
@@ -85,6 +103,37 @@ def main(argv: Optional[List[str]] = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        return 0
+
+    if args.action == "bisect":
+        if not command:
+            parser.error(
+                "no command given; pass it after '--', "
+                "e.g. bisect HEAD~20..HEAD --threshold 2.0 -- pytest"
+            )
+
+        def print_result(result):
+            print(f"{result.sha[:12]}  {result.seconds:8.3f}s  {result.subject}")
+
+        try:
+            culprit = runner.bisect_range(
+                Path.cwd(),
+                args.range,
+                command,
+                args.threshold,
+                on_result=print_result,
+            )
+        except (gitutils.GitError, ValueError) as exc:
+            print(f"git-bench: {exc}", file=sys.stderr)
+            return 1
+
+        if culprit is None:
+            print(f"git-bench: no commit in range exceeded {args.threshold}s")
+            return 1
+        print(
+            f"git-bench: first commit over {args.threshold}s is "
+            f"{culprit.sha[:12]}  {culprit.subject}"
+        )
         return 0
 
     if args.action == "report":
