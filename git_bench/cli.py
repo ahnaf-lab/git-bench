@@ -55,6 +55,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds; report the first commit whose command takes longer than this",
     )
 
+    check_parser = subparsers.add_parser(
+        "check",
+        help="fail if HEAD is slower than a baseline revision by more than a percent threshold",
+    )
+    check_parser.add_argument(
+        "baseline",
+        help="a git revision to compare HEAD against, e.g. main or HEAD~1",
+    )
+    check_parser.add_argument(
+        "--max-regression",
+        dest="max_regression",
+        type=float,
+        default=10.0,
+        help="allowed percent slowdown vs the baseline before failing (default: 10.0)",
+    )
+
     install_parser = subparsers.add_parser(
         "install",
         help="wire the 'git bench' alias and prepare the local results cache",
@@ -145,6 +161,52 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"git-bench: first commit over {args.threshold}s is "
             f"{culprit.sha[:12]}  {culprit.subject}"
         )
+        return 0
+
+    if args.action == "check":
+        if not command:
+            parser.error(
+                "no command given; pass it after '--', "
+                "e.g. check main --max-regression 10 -- pytest"
+            )
+
+        def print_result(result):
+            print(f"{result.sha[:12]}  {result.seconds:8.3f}s  {result.subject}")
+
+        try:
+            outcome = runner.check_regression(
+                Path.cwd(),
+                args.baseline,
+                command,
+                args.max_regression,
+                on_result=print_result,
+            )
+        except (gitutils.GitError, ValueError) as exc:
+            print(f"git-bench: {exc}", file=sys.stderr)
+            return 1
+
+        sign = "+" if outcome.regression_percent >= 0 else ""
+        print(
+            f"git-bench: baseline {outcome.baseline.seconds:.3f}s -> "
+            f"HEAD {outcome.head.seconds:.3f}s "
+            f"({sign}{outcome.regression_percent:.1f}%, limit {args.max_regression:.1f}%)"
+        )
+
+        if outcome.baseline.returncode != 0 or outcome.head.returncode != 0:
+            print(
+                "git-bench: command exited non-zero during check "
+                f"(baseline rc={outcome.baseline.returncode}, head rc={outcome.head.returncode})",
+                file=sys.stderr,
+            )
+            return 1
+
+        if outcome.exceeded:
+            print(
+                f"git-bench: HEAD is slower than {args.baseline} by more than "
+                f"{args.max_regression:.1f}%",
+                file=sys.stderr,
+            )
+            return 1
         return 0
 
     if args.action == "install":

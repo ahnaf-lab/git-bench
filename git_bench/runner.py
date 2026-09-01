@@ -107,6 +107,69 @@ def bisect_range(
     return cache[found_index] if found_index is not None else None
 
 
+@dataclass(frozen=True)
+class CheckResult:
+    baseline: CommitResult
+    head: CommitResult
+    regression_percent: float
+    exceeded: bool
+
+
+def regression_percent(baseline_seconds: float, head_seconds: float) -> float:
+    """Return how much slower (or faster, as a negative number) ``head_seconds``
+    is than ``baseline_seconds``, as a percentage of the baseline.
+    """
+    if baseline_seconds <= 0:
+        raise ValueError("baseline seconds must be a positive number")
+    return (head_seconds - baseline_seconds) / baseline_seconds * 100.0
+
+
+def check_regression(
+    repo: Path,
+    baseline_rev: str,
+    command: List[str],
+    max_regression_percent: float,
+    results_file: Optional[Path] = None,
+    on_result: Optional[Callable[[CommitResult], None]] = None,
+) -> CheckResult:
+    """Time ``command`` at ``baseline_rev`` and at ``HEAD`` and compare them.
+
+    Both commits are timed the same way ``run_range`` times each commit (a
+    throwaway ``git worktree``, so the current working tree and index are
+    never touched) and each timing is still appended to the local JSON
+    store. ``exceeded`` is ``True`` when HEAD is slower than the baseline by
+    more than ``max_regression_percent`` percent.
+    """
+    if not command:
+        raise ValueError("command must be a non-empty list of arguments")
+    if max_regression_percent < 0:
+        raise ValueError("max_regression_percent must not be negative")
+
+    repo = gitutils.repo_root(repo)
+    baseline_commit = gitutils.resolve_commit(repo, baseline_rev)
+    head_commit = gitutils.resolve_commit(repo, "HEAD")
+    results_file = results_file or storage.results_path(repo)
+    command_str = " ".join(command)
+
+    scratch_root = Path(tempfile.mkdtemp(prefix="git-bench-check-"))
+    try:
+        baseline_result = _time_commit(repo, scratch_root, 0, baseline_commit, command)
+        _record(results_file, command_str, baseline_result, on_result)
+        head_result = _time_commit(repo, scratch_root, 1, head_commit, command)
+        _record(results_file, command_str, head_result, on_result)
+    finally:
+        shutil.rmtree(scratch_root, ignore_errors=True)
+
+    pct = regression_percent(baseline_result.seconds, head_result.seconds)
+    exceeded = pct > max_regression_percent
+    return CheckResult(
+        baseline=baseline_result,
+        head=head_result,
+        regression_percent=pct,
+        exceeded=exceeded,
+    )
+
+
 def bisect_first_over(
     length: int, threshold: float, time_at: Callable[[int], float]
 ) -> Optional[int]:

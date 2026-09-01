@@ -100,6 +100,74 @@ class CliBisectTest(unittest.TestCase):
         self.assertIn("no commit", output)
 
 
+class CliCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.repo = init_repo()
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+
+    def _run_in_repo(self, argv, capture=False):
+        old_cwd = os.getcwd()
+        os.chdir(self.repo)
+        try:
+            if not capture:
+                return cli.main(argv), ""
+            out = io.StringIO()
+            with redirect_stdout(out):
+                rc = cli.main(argv)
+            return rc, out.getvalue()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_check_fails_on_a_real_slowdown(self):
+        sha1 = commit_file(self.repo, "a.txt", "1", "baseline")
+        commit_file(self.repo, "a.txt", "2", "the regression")
+
+        script = (
+            "import pathlib, time\n"
+            "content = pathlib.Path('a.txt').read_text().strip()\n"
+            "time.sleep(0.5 if content == '2' else 0.0)\n"
+        )
+        rc, output = self._run_in_repo(
+            [
+                "check",
+                sha1,
+                "--max-regression",
+                "10",
+                "--",
+                sys.executable,
+                "-c",
+                script,
+            ],
+            capture=True,
+        )
+        self.assertEqual(rc, 1)
+        self.assertIn("baseline", output)
+
+    def test_check_passes_when_head_is_not_slower(self):
+        sha1 = commit_file(self.repo, "a.txt", "1", "baseline")
+        commit_file(self.repo, "a.txt", "2", "no real change")
+
+        rc, output = self._run_in_repo(
+            [
+                "check",
+                sha1,
+                "--max-regression",
+                "1000",
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            capture=True,
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("baseline", output)
+
+    def test_check_missing_command_is_a_usage_error(self):
+        with self.assertRaises(SystemExit):
+            cli.main(["check", "HEAD~1"])
+
+
 class CliReportTest(unittest.TestCase):
     def setUp(self):
         self.repo = init_repo()

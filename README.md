@@ -121,6 +121,34 @@ git-bench: first commit over 2.0s is a1b2c3d4e5f6  switch to naive regex match
 If nothing in the range exceeds the threshold, it says so and exits
 non-zero.
 
+Guard against regressions in CI by comparing HEAD to a baseline revision:
+
+```
+git bench check <baseline-rev> --max-regression <percent> -- <command> [args...]
+```
+
+For example, to fail a pull request build if it is more than 10% slower than
+`main`:
+
+```
+git bench check main --max-regression 10 -- pytest -q
+```
+
+Both the baseline and `HEAD` are timed the same way `run` times each commit
+(a throwaway `git worktree`, so your working tree is untouched), and both
+timings are logged to `.git-bench/results.json` alongside everything else:
+
+```
+a1b2c3d4e5f6     0.131s  merge main
+7d7d7ea44cc9     0.284s  add slow validation pass
+git-bench: baseline 0.131s -> HEAD 0.284s (+116.8%, limit 10.0%)
+git-bench: HEAD is slower than main by more than 10.0%
+```
+
+`--max-regression` defaults to `10.0` (percent) if omitted. `check` exits
+non-zero if HEAD is slower than the baseline by more than the threshold, or
+if either invocation of the command itself exits non-zero.
+
 ## Status
 
 Built autonomously and gated on passing tests: every change ships only after

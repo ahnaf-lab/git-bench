@@ -102,6 +102,18 @@ def resolve_range(repo: Path, rev_range: str) -> List[Commit]:
     return commits
 
 
+def resolve_commit(repo: Path, rev: str) -> Commit:
+    """Resolve a single revision (e.g. ``HEAD``, ``main``, a short sha) to a
+    ``Commit`` with its full sha and subject line.
+    """
+    out = _run_git(["log", "-1", "--pretty=format:%H\t%s", rev], cwd=repo)
+    line = out.strip()
+    if "\t" not in line:
+        raise GitError(f"could not resolve revision {rev!r}")
+    sha, subject = line.split("\t", 1)
+    return Commit(sha=sha, subject=subject)
+
+
 def add_worktree(repo: Path, worktree_path: Path, commit_sha: str) -> None:
     _run_git(
         ["worktree", "add", "--detach", "--quiet", str(worktree_path), commit_sha],
