@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Executable shim so ``git bench ...`` resolves to this tool once this
+directory is on PATH (git dispatches ``git <name>`` to a ``git-<name>``
+executable). Delegates straight to the installed package's CLI.
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), os.pardir))
+
+from git_bench.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())

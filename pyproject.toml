@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-bench"
+version = "0.1.0"
+description = "Time your build/test command at each commit in a range and spot regressions."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+git-bench = "git_bench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["git_bench*"]
