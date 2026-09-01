@@ -1,0 +1,20 @@
+{
+  "pytest -q": [
+    {
+      "commit": "1111111111111111111111111111111111111111",
+      "subject": "one",
+      "seconds": 1.0,
+      "returncode": 0,
+      "timestamp": 1.0
+    }
+  ],
+  "make test": [
+    {
+      "commit": "2222222222222222222222222222222222222222",
+      "subject": "two",
+      "seconds": 3.0,
+      "returncode": 0,
+      "timestamp": 2.0
+    }
+  ]
+}

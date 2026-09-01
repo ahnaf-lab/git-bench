@@ -1,0 +1,25 @@
+{
+  "pytest -q": [
+    {
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "subject": "first commit",
+      "seconds": 1.0,
+      "returncode": 0,
+      "timestamp": 1.0
+    },
+    {
+      "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "subject": "second commit, a bit slower",
+      "seconds": 2.5,
+      "returncode": 0,
+      "timestamp": 2.0
+    },
+    {
+      "commit": "cccccccccccccccccccccccccccccccccccccccc",
+      "subject": "third commit, much slower",
+      "seconds": 5.0,
+      "returncode": 1,
+      "timestamp": 3.0
+    }
+  ]
+}

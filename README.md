@@ -51,6 +51,32 @@ build up history you can compare over time. A commit whose command exits
 non-zero is still recorded (with its real return code); `git-bench` exits
 non-zero afterwards if any commit failed.
 
+Render the recorded history as an ASCII sparkline and table:
+
+```
+git bench report
+```
+
+```
+.-=*@
+
+commit        seconds   rc  subject
+------------------------------------
+7d7d7ea44cc9    0.097s   0  fix off-by-one in parser
+a1b2c3d4e5f6    0.131s   0  add caching layer
+9f8e7d6c5b4a    0.284s   0  switch to naive regex match
+```
+
+The sparkline reads oldest-to-newest, left-to-right, and buckets each timing
+into a relative level between the fastest and slowest run in the series, so a
+jump in character height is a jump in wall-clock time — the commit under the
+tallest character is where to start looking. If more than one command has
+been recorded, pass `--command` to pick which one:
+
+```
+git bench report --command "pytest -q"
+```
+
 ## Status
 
 Built autonomously and gated on passing tests: every change ships only after

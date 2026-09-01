@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import gitutils, runner
+from . import gitutils, report, runner, storage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +34,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="the command to time, e.g. -- pytest -q",
     )
 
+    report_parser = subparsers.add_parser(
+        "report",
+        help="render a sparkline and table for previously recorded runs",
+    )
+    report_parser.add_argument(
+        "--command",
+        dest="report_command",
+        default=None,
+        help="which recorded command to report on; required if more than one is stored",
+    )
+
     return parser
 
 
@@ -53,7 +64,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not command:
             parser.error("no command given; pass it after '--', e.g. run HEAD~3..HEAD -- pytest")
 
-        def report(result):
+        def print_result(result):
             print(f"{result.sha[:12]}  {result.seconds:8.3f}s  {result.subject}")
 
         try:
@@ -61,7 +72,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 Path.cwd(),
                 args.range,
                 command,
-                on_result=report,
+                on_result=print_result,
             )
         except (gitutils.GitError, ValueError) as exc:
             print(f"git-bench: {exc}", file=sys.stderr)
@@ -74,6 +85,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        return 0
+
+    if args.action == "report":
+        try:
+            repo = gitutils.repo_root(Path.cwd())
+            results_file = storage.results_path(repo)
+            _, entries = report.load_command_entries(results_file, args.report_command)
+        except (gitutils.GitError, ValueError) as exc:
+            print(f"git-bench: {exc}", file=sys.stderr)
+            return 1
+        print(report.render_report(entries))
         return 0
 
     parser.error(f"unknown action {args.action!r}")
