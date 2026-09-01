@@ -84,16 +84,17 @@ class BisectRangeIntegrationTest(unittest.TestCase):
         # "1" and "2", slow from "3" onward, simulating a real regression.
         # ``sha0..sha4`` excludes sha0 itself, so the timed range is
         # ["1", "2", "3", "4"]. The threshold sits well clear of both the
-        # 0s "fast" case and the 0.6s "slow" case so interpreter/process
-        # startup jitter can't flip a classification.
+        # 0s "fast" case and the 1.5s "slow" case (a wide 0.5s margin on
+        # each side) so interpreter/process startup jitter under a loaded
+        # test run can't flip a classification.
         script = (
             "import pathlib, time, sys\n"
             "content = pathlib.Path('a.txt').read_text().strip()\n"
-            "time.sleep(0.6 if content in ('3', '4') else 0.0)\n"
+            "time.sleep(1.5 if content in ('3', '4') else 0.0)\n"
         )
         command = [sys.executable, "-c", script]
 
-        culprit = runner.bisect_range(self.repo, f"{sha0}..{sha4}", command, threshold=0.3)
+        culprit = runner.bisect_range(self.repo, f"{sha0}..{sha4}", command, threshold=1.0)
 
         self.assertIsNotNone(culprit)
         self.assertEqual(culprit.sha, sha3)

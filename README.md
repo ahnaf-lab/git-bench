@@ -18,9 +18,24 @@ pip install -e .
 ```
 
 This installs the `git-bench` console script. To also invoke it as a git
-subcommand (`git bench ...`), put this repo's `bin/` directory on your
-`PATH` — git dispatches `git <name>` to a `git-<name>` executable, and
-`bin/git-bench` is that executable.
+subcommand (`git bench ...`), either put this repo's `bin/` directory on
+your `PATH` — git dispatches `git <name>` to a `git-<name>` executable, and
+`bin/git-bench` is that executable — or run the one-time setup below.
+
+Inside any git repository you want to benchmark:
+
+```
+git bench install
+```
+
+This writes a `bench` alias to that repository's local git config (add
+`--global` to install it for every repository instead), so `git bench ...`
+works without putting anything on `PATH`. It also creates the local
+`.git-bench/` results cache and adds it to `info/exclude` in the repo's
+git directory — never to a tracked file like `.gitignore` — so it never
+shows up as an untracked file in `git status`, even from a linked
+`git worktree`. Running it again is safe; it updates the alias in place and
+never duplicates the exclude entry.
 
 ## Usage
 

@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import gitutils, report, runner, storage
+from . import gitutils, install, report, runner, storage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,6 +53,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         required=True,
         help="seconds; report the first commit whose command takes longer than this",
+    )
+
+    install_parser = subparsers.add_parser(
+        "install",
+        help="wire the 'git bench' alias and prepare the local results cache",
+    )
+    install_parser.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="write the alias to the global git config instead of this repo's local config",
     )
 
     return parser
@@ -134,6 +145,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"git-bench: first commit over {args.threshold}s is "
             f"{culprit.sha[:12]}  {culprit.subject}"
         )
+        return 0
+
+    if args.action == "install":
+        try:
+            result = install.install(Path.cwd(), global_scope=args.global_scope)
+        except (gitutils.GitError, FileNotFoundError) as exc:
+            print(f"git-bench: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"git-bench: alias 'git bench' -> {result.alias_command[1:]} "
+            f"({result.alias_scope})"
+        )
+        print(f"git-bench: cache dir ready at {result.cache_dir}")
+        if result.exclude_added:
+            print(f"git-bench: excluded {result.cache_dir.name}/ in {result.exclude_file}")
+        else:
+            print(f"git-bench: {result.cache_dir.name}/ already excluded in {result.exclude_file}")
         return 0
 
     if args.action == "report":
